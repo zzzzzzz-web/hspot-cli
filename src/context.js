@@ -12,7 +12,7 @@ import { createLogger } from './lib/logger.js';
 import { UserError } from './lib/errors.js';
 
 export async function buildContext(globalOpts = {}) {
-  const token = loadToken();
+  const token = await loadToken();
   if (!token) {
     throw new UserError('No HubSpot access token found.', {
       hint:

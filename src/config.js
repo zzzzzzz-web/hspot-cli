@@ -7,13 +7,14 @@
 import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import dotenv from 'dotenv';
 
 // Config files searched (first match wins), relative to cwd.
 const CONFIG_FILENAMES = ['.hspotrc', '.hspotrc.json', 'hspot.config.json'];
 
-export function loadToken() {
+export async function loadToken() {
   // Load .env from cwd if present; real env vars still take precedence.
+  // dotenv is imported lazily so pure helpers here stay dependency-free for tests.
+  const { default: dotenv } = await import('dotenv');
   dotenv.config();
   return process.env.HUBSPOT_TOKEN || process.env.HUBSPOT_PRIVATE_APP_TOKEN || '';
 }

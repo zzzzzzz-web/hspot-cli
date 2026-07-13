@@ -3,20 +3,34 @@
 // so it can be unit-tested with a fake `raw` client. Every network call goes
 // through `#call`, which adds rate-limit retry/backoff and translates raw
 // failures into actionable UserErrors.
-import { Client } from '@hubspot/api-client';
+//
+// The real SDK is imported lazily (only when no `raw` is injected), so unit
+// tests can exercise this class without the dependency installed.
 import { withRetry } from '../lib/retry.js';
 import { explainApiError } from '../lib/errors.js';
 
 const PAGE_SIZE = 100; // HubSpot max per page for these endpoints.
 
 export class HubSpotClient {
-  #raw;
+  #token;
   #log;
+  #raw;
 
   constructor({ token, log, raw } = {}) {
     // `raw` injection point exists purely to make this class testable.
-    this.#raw = raw ?? new Client({ accessToken: token });
+    this.#token = token;
     this.#log = log;
+    this.#raw = raw;
+  }
+
+  // Resolve the SDK's `crm` namespace, constructing the real client on first
+  // use unless one was injected.
+  async #crm() {
+    if (!this.#raw) {
+      const { Client } = await import('@hubspot/api-client');
+      this.#raw = new Client({ accessToken: this.#token });
+    }
+    return this.#raw.crm;
   }
 
   // Run a single API call with retry + error translation.
@@ -31,7 +45,7 @@ export class HubSpotClient {
   // Paginate the CRM Search API for an object type, following the `after`
   // cursor until exhausted. `onProgress(fetched, total)` is called per page.
   async searchAll({ objectType, request, resources, onProgress }) {
-    const api = this.#raw.crm[objectType].searchApi;
+    const api = (await this.#crm())[objectType].searchApi;
     const results = [];
     let after;
     do {
@@ -46,7 +60,7 @@ export class HubSpotClient {
 
   // Paginate the CRM Basic API (list all) for an object type.
   async pageAll({ objectType, properties, resources, onProgress }) {
-    const api = this.#raw.crm[objectType].basicApi;
+    const api = (await this.#crm())[objectType].basicApi;
     const results = [];
     let after;
     do {
@@ -65,7 +79,7 @@ export class HubSpotClient {
   // 100 per request. `inputs` is [{ id, properties }]. This is a WRITE call —
   // callers are responsible for gating it behind the --live safety flag.
   async batchUpdate({ objectType, inputs, resources, onProgress }) {
-    const api = this.#raw.crm[objectType].batchApi;
+    const api = (await this.#crm())[objectType].batchApi;
     const results = [];
     for (let i = 0; i < inputs.length; i += PAGE_SIZE) {
       const chunk = inputs.slice(i, i + PAGE_SIZE);
@@ -78,8 +92,9 @@ export class HubSpotClient {
 
   // Deal pipelines + stages, for resolving human labels and pipeline filters.
   async getDealPipelines() {
+    const crm = await this.#crm();
     const res = await this.#call(
-      () => this.#raw.crm.pipelines.pipelinesApi.getAll('deals'),
+      () => crm.pipelines.pipelinesApi.getAll('deals'),
       { resources: ['pipelines'] },
     );
     return res.results ?? [];
@@ -87,11 +102,12 @@ export class HubSpotClient {
 
   // All owners, for resolving owner id -> display name.
   async getOwners() {
+    const crm = await this.#crm();
     const results = [];
     let after;
     do {
       const page = await this.#call(
-        () => this.#raw.crm.owners.ownersApi.getPage(undefined, after),
+        () => crm.owners.ownersApi.getPage(undefined, after),
         { resources: ['owners'] },
       );
       results.push(...(page.results ?? []));

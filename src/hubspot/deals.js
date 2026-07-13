@@ -80,7 +80,10 @@ export function updateDeals(client, inputs, { onProgress } = {}) {
   });
 }
 
-function enrichDeal(deal, { now, stageLabels, pipelineLabels, ownerNames }) {
+// Exported for unit testing. Enriches one raw deal with resolved labels and a
+// computed `daysSinceActivity` (prefers most recent activity, falls back to
+// last modified).
+export function enrichDeal(deal, { now, stageLabels, pipelineLabels, ownerNames }) {
   const p = deal.properties ?? {};
   // Prefer the most recent engagement/activity; fall back to last modified.
   const activityRaw = p.hs_lastactivitydate || p.hs_lastmodifieddate || null;

@@ -286,4 +286,22 @@ Two design points make write commands drop-in:
 2. **API logic is decoupled from the CLI.** Everything under `src/hubspot/`
    talks to `@hubspot/api-client` and takes plain arguments, so it can be
    unit-tested without Commander (the client accepts an injected `raw` client).
+
+## Development
+
+Tests use Node's built-in runner — no extra dependencies or API token required
+(the HubSpot SDK and dotenv are lazily loaded / stubbed in tests):
+
+```bash
+npm test        # runs test/*.test.js
 ```
+
+Test layout:
+
+- `test/transforms.test.js` — pure transforms (set/target parsing, deal
+  enrichment, missing-property detection, config precedence, output formatting).
+- `test/bulk-safety.test.js` — the `--live` write-gate guarantees: dry-run never
+  calls a write endpoint, and writes are correctly shaped only under `--live`.
+- `test/client.test.js` — API pagination (cursor following) and batch chunking,
+  against a fake `raw` client.
+- `test/retry.test.js` — rate-limit backoff/retry and scope-aware error mapping.

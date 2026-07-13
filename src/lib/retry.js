@@ -4,7 +4,7 @@
 // off exponentially with a little jitter.
 import { statusOf } from './errors.js';
 
-const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
+const defaultSleep = (ms) => new Promise((res) => setTimeout(res, ms));
 
 function retryAfterMs(err) {
   const headers = err?.response?.headers ?? err?.headers;
@@ -18,7 +18,10 @@ function retryAfterMs(err) {
   return Number.isFinite(seconds) ? seconds * 1000 : undefined;
 }
 
-export async function withRetry(fn, { retries = 5, baseDelay = 500, maxDelay = 20000, log } = {}) {
+export async function withRetry(
+  fn,
+  { retries = 5, baseDelay = 500, maxDelay = 20000, log, sleep = defaultSleep } = {},
+) {
   let attempt = 0;
   for (;;) {
     try {
