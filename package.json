@@ -1,0 +1,33 @@
+{
+  "name": "hspot",
+  "version": "0.1.0",
+  "description": "Audit and (eventually) manage your HubSpot CRM data from the command line. Read-only by default.",
+  "type": "module",
+  "bin": {
+    "hspot": "bin/hspot.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "start": "node bin/hspot.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "hubspot",
+    "crm",
+    "cli",
+    "audit"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@hubspot/api-client": "^12.0.1",
+    "commander": "^12.1.0",
+    "dotenv": "^16.4.5"
+  }
+}

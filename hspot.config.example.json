@@ -1,0 +1,15 @@
+{
+  "//": "Copy to hspot.config.json or .hspotrc to set defaults. CLI flags always win.",
+  "format": "table",
+  "staleDays": 45,
+  "audit": {
+    "deals": {
+      "staleDays": 60,
+      "pipeline": "Sales Pipeline"
+    },
+    "contacts": {
+      "missing": "phone,company,jobtitle",
+      "lifecycleStage": "lead"
+    }
+  }
+}
