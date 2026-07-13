@@ -36,6 +36,17 @@ export async function fetchContacts(client, { lifecycleStage, missingProps = [],
   });
 }
 
+// Batch-update contacts. `inputs` is [{ id, properties }]. WRITE operation —
+// the command layer must gate this behind --live. Owns the contacts write scope.
+export function updateContacts(client, inputs, { onProgress } = {}) {
+  return client.batchUpdate({
+    objectType: 'contacts',
+    inputs,
+    resources: ['contactsWrite'],
+    onProgress,
+  });
+}
+
 // Given a contact and the list of properties to check, return the subset that
 // are empty/absent. A property counts as missing if it is null, undefined, or
 // an empty/whitespace string.

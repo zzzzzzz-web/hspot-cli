@@ -68,6 +68,18 @@ export async function fetchOpenDeals(client, { pipelineName, onProgress, log } =
   return raw.map((deal) => enrichDeal(deal, { now, stageLabels, pipelineLabels, ownerNames }));
 }
 
+// Batch-update deals. `inputs` is [{ id, properties }]. WRITE operation — the
+// command layer must gate this behind --live. Owns the deals write scope so the
+// scope name never leaks into the command layer.
+export function updateDeals(client, inputs, { onProgress } = {}) {
+  return client.batchUpdate({
+    objectType: 'deals',
+    inputs,
+    resources: ['dealsWrite'],
+    onProgress,
+  });
+}
+
 function enrichDeal(deal, { now, stageLabels, pipelineLabels, ownerNames }) {
   const p = deal.properties ?? {};
   // Prefer the most recent engagement/activity; fall back to last modified.

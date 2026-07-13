@@ -61,6 +61,21 @@ export class HubSpotClient {
     return results;
   }
 
+  // Batch-update objects via the CRM Batch API, chunked to HubSpot's max of
+  // 100 per request. `inputs` is [{ id, properties }]. This is a WRITE call —
+  // callers are responsible for gating it behind the --live safety flag.
+  async batchUpdate({ objectType, inputs, resources, onProgress }) {
+    const api = this.#raw.crm[objectType].batchApi;
+    const results = [];
+    for (let i = 0; i < inputs.length; i += PAGE_SIZE) {
+      const chunk = inputs.slice(i, i + PAGE_SIZE);
+      const res = await this.#call(() => api.update({ inputs: chunk }), { resources });
+      results.push(...(res.results ?? []));
+      onProgress?.(Math.min(i + PAGE_SIZE, inputs.length), inputs.length);
+    }
+    return results;
+  }
+
   // Deal pipelines + stages, for resolving human labels and pipeline filters.
   async getDealPipelines() {
     const res = await this.#call(

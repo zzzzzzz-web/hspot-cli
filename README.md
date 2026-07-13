@@ -4,10 +4,11 @@ A command-line tool for **auditing** (and, in future phases, managing) your
 HubSpot CRM data.
 
 > **Safety first.** `hspot` is **read-only by default**. Every command runs as a
-> dry-run out of the box — no flag required. Any command that would ever
-> write/mutate data (coming in later phases) will require an explicit `--live`
-> flag; without it, such commands only print what they *would* do and never call
-> a write endpoint. The audit commands in this release are inherently read-only.
+> dry-run out of the box — no flag required. Any command that writes/mutates
+> data requires an explicit `--live` flag; without it, such commands only print
+> what they *would* do and never call a write endpoint. The `audit` commands are
+> inherently read-only; the `bulk update` commands write only under `--live`
+> (and prompt for confirmation first — see [`hspot bulk update`](#hspot-bulk-update)).
 
 ## Contents
 - [Requirements](#requirements)
@@ -19,6 +20,7 @@ HubSpot CRM data.
 - [Usage](#usage)
   - [`hspot audit deals`](#hspot-audit-deals)
   - [`hspot audit contacts`](#hspot-audit-contacts)
+  - [`hspot bulk update`](#hspot-bulk-update)
 - [Output formats](#output-formats)
 - [Troubleshooting](#troubleshooting)
 - [Architecture](#architecture)
@@ -65,8 +67,11 @@ Add these read scopes to the private app:
 | `crm.objects.deals.read` | `audit deals` (deals + pipelines/stages) |
 | `crm.objects.contacts.read` | `audit contacts` |
 | `crm.objects.owners.read` | Resolving deal **owner** names (optional; without it, owner IDs are shown) |
+| `crm.objects.deals.write` | `bulk update deals` **with `--live`** |
+| `crm.objects.contacts.write` | `bulk update contacts` **with `--live`** |
 
-If a required scope is missing, `hspot` will tell you exactly which scope to add.
+The write scopes are only needed if you run `bulk update --live`. If a required
+scope is missing, `hspot` will tell you exactly which scope to add.
 
 ## Configure your token (`.env`)
 
@@ -186,6 +191,45 @@ hspot audit contacts --missing "phone,company,jobtitle" \
 hspot audit contacts --format json --output contacts-audit.json
 ```
 
+### `hspot bulk update`
+
+Bulk-sets one or more properties on many deals or contacts at once. This is a
+**write** command, so it follows the safety model:
+
+- **Without `--live`** it is a dry-run: it prints the plan (which records, which
+  property changes) and calls **no** write endpoint.
+- **With `--live`** it applies the change — after an interactive confirmation.
+  Pass `--yes` to skip the prompt (this is **required** when running `--live`
+  non-interactively, e.g. in a script/CI).
+
+Targets come from an audit JSON file (`--from`) and/or an explicit id list
+(`--ids`); the two are merged and de-duplicated. This composes directly with the
+audit commands: audit to JSON, then feed that file into `bulk update`.
+
+| Flag | Description |
+| --- | --- |
+| `--set <key=value>` | Property to set (**repeatable**; at least one required). |
+| `--from <path>` | JSON file of target records, each with an `id` (audit `--format json` output). |
+| `--ids <ids>` | Comma-separated record IDs to update. |
+| `--yes` | Skip the confirmation prompt (required for non-interactive `--live`). |
+| `--live` | *(global)* Actually perform the write. Omit for a dry-run. |
+
+```bash
+# 1) Audit stale deals to a JSON file
+hspot audit deals --stale-days 60 --format json --output stale.json
+
+# 2) Dry-run: preview reassigning every stale deal to owner 12345 (no writes)
+hspot bulk update deals --set hubspot_owner_id=12345 --from stale.json
+
+# 3) Apply it for real (prompts for confirmation)
+hspot bulk update deals --set hubspot_owner_id=12345 --from stale.json --live
+
+# Update specific contacts by id, setting two properties, no prompt
+hspot bulk update contacts \
+  --set lifecyclestage=lead --set hs_lead_status=NEW \
+  --ids 201,202,203 --live --yes
+```
+
 ## Output formats
 
 - **table** (default) — aligned columns for reading in the terminal.
@@ -219,22 +263,26 @@ src/cli.js                Commander program + global flags + context bridge.
 src/context.js            Builds the shared run context (holds `isLive`).
 src/config.js             Token + config-file loading and precedence helper.
 src/commands/             CLI/command layer (Commander-aware).
-  audit/index.js          The `audit` command group.
+  audit/index.js          The `audit` command group (read-only).
   audit/deals.js          `audit deals` handler.
   audit/contacts.js       `audit contacts` handler.
+  bulk/index.js           The `bulk update` command group (writes; --live gated).
+  bulk/update.js          Shared dry-run/confirm/write handler.
 src/hubspot/              HubSpot API layer (no Commander here).
-  client.js               API client wrapper: pagination + retry + error mapping.
-  deals.js                Deal fetching/enrichment.
-  contacts.js             Contact fetching + missing-property logic.
-src/lib/                  Reusable helpers (output, errors, retry, logger).
+  client.js               API client wrapper: pagination + batch write + retry + errors.
+  deals.js                Deal fetching/enrichment + batch update.
+  contacts.js             Contact fetching + missing-property logic + batch update.
+src/lib/                  Reusable helpers (output, errors, retry, logger, prompt).
 ```
 
-Two design points make later write commands drop-in:
+Two design points make write commands drop-in:
 
 1. **The safety seam is centralized.** `src/context.js` builds a run context
-   containing `isLive` (default `false`). Every command handler already receives
-   this context, so a future write command just gates its mutating calls behind
-   `ctx.isLive` — printing what it *would* do otherwise. No plumbing changes.
+   containing `isLive` (default `false`). Every command handler receives this
+   context and gates any mutating call behind `ctx.isLive` — printing what it
+   *would* do otherwise. `bulk update` is the reference implementation; the next
+   write commands (enrichment, dedupe) reuse the same seam with no plumbing
+   changes.
 2. **API logic is decoupled from the CLI.** Everything under `src/hubspot/`
    talks to `@hubspot/api-client` and takes plain arguments, so it can be
    unit-tested without Commander (the client accepts an injected `raw` client).

@@ -18,6 +18,9 @@ export const REQUIRED_SCOPES = {
   contacts: ['crm.objects.contacts.read'],
   owners: ['crm.objects.owners.read'],
   pipelines: ['crm.objects.deals.read'],
+  // Write scopes (bulk update and future mutating commands).
+  dealsWrite: ['crm.objects.deals.write'],
+  contactsWrite: ['crm.objects.contacts.write'],
 };
 
 // Best-effort extraction of an HTTP status from the various error shapes the
