@@ -82,6 +82,18 @@ export function fetchAllDeals(client, { by = 'dealname', onProgress } = {}) {
   });
 }
 
+// Read specific deals by id, returning [{ id, properties }] for the given
+// properties. Read-only; used by `enrich` to see which properties are blank.
+export function readDeals(client, ids, properties, { onProgress } = {}) {
+  return client.batchRead({
+    objectType: 'deals',
+    ids,
+    properties,
+    resources: ['deals'],
+    onProgress,
+  });
+}
+
 // Merge a duplicate deal into a primary one. WRITE operation — the command
 // layer must gate this behind --live. Owns the deals write scope.
 export function mergeDeals(client, { primaryId, mergeId }) {

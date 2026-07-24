@@ -51,6 +51,18 @@ export function updateContacts(client, inputs, { onProgress } = {}) {
   });
 }
 
+// Read specific contacts by id, returning [{ id, properties }] for the given
+// properties. Read-only; used by `enrich` to see which properties are blank.
+export function readContacts(client, ids, properties, { onProgress } = {}) {
+  return client.batchRead({
+    objectType: 'contacts',
+    ids,
+    properties,
+    resources: ['contacts'],
+    onProgress,
+  });
+}
+
 // Merge a duplicate contact into a primary one. WRITE operation — the command
 // layer must gate this behind --live. Owns the contacts write scope.
 export function mergeContacts(client, { primaryId, mergeId }) {

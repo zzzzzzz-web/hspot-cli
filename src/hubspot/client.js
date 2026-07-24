@@ -75,6 +75,24 @@ export class HubSpotClient {
     return results;
   }
 
+  // Batch-read objects by id via the CRM Batch API, chunked to HubSpot's max of
+  // 100 per request. Returns [{ id, properties }] for the requested properties.
+  // Read-only.
+  async batchRead({ objectType, ids, properties, resources, onProgress }) {
+    const api = (await this.#crm())[objectType].batchApi;
+    const results = [];
+    for (let i = 0; i < ids.length; i += PAGE_SIZE) {
+      const chunk = ids.slice(i, i + PAGE_SIZE);
+      const res = await this.#call(
+        () => api.read({ inputs: chunk.map((id) => ({ id: String(id) })), properties }),
+        { resources },
+      );
+      results.push(...(res.results ?? []));
+      onProgress?.(Math.min(i + PAGE_SIZE, ids.length), ids.length);
+    }
+    return results;
+  }
+
   // Batch-update objects via the CRM Batch API, chunked to HubSpot's max of
   // 100 per request. `inputs` is [{ id, properties }]. This is a WRITE call —
   // callers are responsible for gating it behind the --live safety flag.

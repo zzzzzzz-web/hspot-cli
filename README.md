@@ -7,9 +7,10 @@ HubSpot CRM data.
 > dry-run out of the box — no flag required. Any command that writes/mutates
 > data requires an explicit `--live` flag; without it, such commands only print
 > what they *would* do and never call a write endpoint. The `audit` commands are
-> inherently read-only; the `bulk update` and `dedupe` commands write only under
-> `--live` (and prompt for confirmation first — see
-> [`hspot bulk update`](#hspot-bulk-update) and [`hspot dedupe`](#hspot-dedupe)).
+> inherently read-only; the `bulk update`, `dedupe`, and `enrich` commands write
+> only under `--live` (and prompt for confirmation first — see
+> [`hspot bulk update`](#hspot-bulk-update), [`hspot dedupe`](#hspot-dedupe), and
+> [`hspot enrich`](#hspot-enrich)).
 
 ## Contents
 - [Requirements](#requirements)
@@ -23,6 +24,7 @@ HubSpot CRM data.
   - [`hspot audit contacts`](#hspot-audit-contacts)
   - [`hspot bulk update`](#hspot-bulk-update)
   - [`hspot dedupe`](#hspot-dedupe)
+  - [`hspot enrich`](#hspot-enrich)
 - [Output formats](#output-formats)
 - [Troubleshooting](#troubleshooting)
 - [Architecture](#architecture)
@@ -66,14 +68,14 @@ Add these read scopes to the private app:
 
 | Scope | Needed for |
 | --- | --- |
-| `crm.objects.deals.read` | `audit deals` (deals + pipelines/stages) |
-| `crm.objects.contacts.read` | `audit contacts` |
+| `crm.objects.deals.read` | `audit deals` (deals + pipelines/stages); `enrich deals` (reads current values) |
+| `crm.objects.contacts.read` | `audit contacts`; `enrich contacts` (reads current values) |
 | `crm.objects.owners.read` | Resolving deal **owner** names (optional; without it, owner IDs are shown) |
-| `crm.objects.deals.write` | `bulk update deals` / `dedupe deals` **with `--live`** |
-| `crm.objects.contacts.write` | `bulk update contacts` / `dedupe contacts` **with `--live`** |
+| `crm.objects.deals.write` | `bulk update deals` / `dedupe deals` / `enrich deals` **with `--live`** |
+| `crm.objects.contacts.write` | `bulk update contacts` / `dedupe contacts` / `enrich contacts` **with `--live`** |
 
 The write scopes are only needed if you run a write command with `--live`
-(`bulk update` or `dedupe`). If a required
+(`bulk update`, `dedupe`, or `enrich`). If a required
 scope is missing, `hspot` will tell you exactly which scope to add.
 
 ## Configure your token (`.env`)
@@ -273,6 +275,49 @@ hspot dedupe contacts --live
 hspot dedupe contacts --live --yes
 ```
 
+### `hspot enrich`
+
+Fills in property values on records — but **only where the current value is
+blank**. Unlike `bulk update` (which sets a property unconditionally), `enrich`
+never overwrites data that is already there, so it is safe to point at a broad
+set of records. This composes directly with `audit … --missing`: audit to find
+the gaps, then enrich to fill them.
+
+Because it must know which values are blank, `enrich` first **reads** the
+targets' current values (needs the read scope), then writes only the records
+that actually have a gap. It follows the same safety model as `bulk update`:
+
+- **Without `--live`** it is a dry-run: it prints which records/properties it
+  *would* fill and writes nothing.
+- **With `--live`** it applies the change — after an interactive confirmation.
+  Pass `--yes` to skip the prompt (**required** for non-interactive `--live`).
+
+Targets come from an audit JSON file (`--from`) and/or an explicit id list
+(`--ids`), merged and de-duplicated — the same targeting as `bulk update`.
+
+| Flag | Description |
+| --- | --- |
+| `--set <key=value>` | Property + value to fill where blank (**repeatable**; at least one required). |
+| `--from <path>` | JSON file of target records, each with an `id` (audit `--format json` output). |
+| `--ids <ids>` | Comma-separated record IDs to enrich. |
+| `--yes` | Skip the confirmation prompt (required for non-interactive `--live`). |
+| `--live` | *(global)* Actually perform the write. Omit for a dry-run. |
+
+```bash
+# 1) Audit contacts missing a lifecycle stage → JSON
+hspot audit contacts --missing lifecyclestage --format json --output gaps.json
+
+# 2) Dry-run: preview filling lifecyclestage=lead on just the ones missing it
+hspot enrich contacts --set lifecyclestage=lead --from gaps.json
+
+# 3) Apply it (only blank records are written; populated ones are skipped)
+hspot enrich contacts --set lifecyclestage=lead --from gaps.json --live
+
+# Fill two properties on specific deals, no prompt
+hspot enrich deals --set dealtype=newbusiness --set priority=medium \
+  --ids 501,502 --live --yes
+```
+
 ## Output formats
 
 - **table** (default) — aligned columns for reading in the terminal.
@@ -313,11 +358,13 @@ src/commands/             CLI/command layer (Commander-aware).
   bulk/update.js          Shared dry-run/confirm/write handler.
   dedupe/index.js         The `dedupe` command group (merges; --live gated).
   dedupe/dedupe.js        Shared grouping + dry-run/confirm/merge handler.
+  enrich/index.js         The `enrich` command group (fills blanks; --live gated).
+  enrich/enrich.js        Shared read/plan + dry-run/confirm/write handler.
   progress.js             Throttled stderr progress indicator for large fetches.
 src/hubspot/              HubSpot API layer (no Commander here).
-  client.js               API client wrapper: pagination + batch write + merge + retry + errors.
-  deals.js                Deal fetching/enrichment + batch update + merge.
-  contacts.js             Contact fetching + missing-property logic + batch update + merge.
+  client.js               API client wrapper: pagination + batch read/write + merge + retry + errors.
+  deals.js                Deal fetching/enrichment + batch read/update + merge.
+  contacts.js             Contact fetching + missing-property logic + batch read/update + merge.
 src/lib/                  Reusable helpers (output, errors, retry, logger, prompt).
 ```
 
@@ -326,9 +373,8 @@ Two design points make write commands drop-in:
 1. **The safety seam is centralized.** `src/context.js` builds a run context
    containing `isLive` (default `false`). Every command handler receives this
    context and gates any mutating call behind `ctx.isLive` — printing what it
-   *would* do otherwise. `bulk update` is the reference implementation and
-   `dedupe` reuses the same seam with no plumbing changes; the next write
-   command (enrichment) will too.
+   *would* do otherwise. `bulk update` is the reference implementation; `dedupe`
+   and `enrich` reuse the same seam with no plumbing changes.
 2. **API logic is decoupled from the CLI.** Everything under `src/hubspot/`
    talks to `@hubspot/api-client` and takes plain arguments, so it can be
    unit-tested without Commander (the client accepts an injected `raw` client).
@@ -351,6 +397,9 @@ Test layout:
 - `test/dedupe.test.js` — duplicate grouping + primary selection, plus the
   `dedupe` merge safety gate (dry-run never merges; `--live` merges each
   duplicate into the surviving primary).
+- `test/enrich.test.js` — blank-only fill planning (never overwrites populated
+  values) and the `enrich` write safety gate (dry-run reads but never writes;
+  `--live` writes only the blank-filling inputs).
 - `test/client.test.js` — API pagination (cursor following) and batch chunking,
   against a fake `raw` client.
 - `test/retry.test.js` — rate-limit backoff/retry and scope-aware error mapping.
