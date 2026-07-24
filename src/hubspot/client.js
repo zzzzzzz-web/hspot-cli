@@ -90,6 +90,22 @@ export class HubSpotClient {
     return results;
   }
 
+  // Merge one object into another via the CRM "merge" endpoint: `mergeId` is
+  // absorbed into `primaryId` (the surviving record). This is a destructive,
+  // irreversible WRITE call — callers must gate it behind the --live safety
+  // flag (and confirm first). Merges are one-at-a-time (no batch endpoint).
+  async mergeObjects({ objectType, primaryId, mergeId, resources }) {
+    const api = (await this.#crm())[objectType].publicObjectApi;
+    return this.#call(
+      () =>
+        api.merge({
+          primaryObjectId: String(primaryId),
+          objectIdToMerge: String(mergeId),
+        }),
+      { resources },
+    );
+  }
+
   // Deal pipelines + stages, for resolving human labels and pipeline filters.
   async getDealPipelines() {
     const crm = await this.#crm();

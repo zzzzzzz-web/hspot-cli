@@ -3,12 +3,16 @@
 
 const BASE_PROPERTIES = ['email', 'firstname', 'lastname', 'lifecyclestage'];
 
-// Fetch contacts, optionally filtered to a lifecycle stage. `missingProps` are
-// included in the property set so the caller can inspect them. When a lifecycle
-// filter is given we use the Search API; otherwise we list all via the Basic
-// API. Both paths paginate fully.
-export async function fetchContacts(client, { lifecycleStage, missingProps = [], onProgress } = {}) {
-  const properties = [...new Set([...BASE_PROPERTIES, ...missingProps])];
+// Fetch contacts, optionally filtered to a lifecycle stage. `missingProps` and
+// `extraProps` are included in the property set so the caller can inspect them
+// (e.g. audit checks `missingProps`; dedupe needs its key property + createdate
+// via `extraProps`). When a lifecycle filter is given we use the Search API;
+// otherwise we list all via the Basic API. Both paths paginate fully.
+export async function fetchContacts(
+  client,
+  { lifecycleStage, missingProps = [], extraProps = [], onProgress } = {},
+) {
+  const properties = [...new Set([...BASE_PROPERTIES, ...missingProps, ...extraProps])];
 
   if (lifecycleStage) {
     return client.searchAll({
@@ -44,6 +48,17 @@ export function updateContacts(client, inputs, { onProgress } = {}) {
     inputs,
     resources: ['contactsWrite'],
     onProgress,
+  });
+}
+
+// Merge a duplicate contact into a primary one. WRITE operation — the command
+// layer must gate this behind --live. Owns the contacts write scope.
+export function mergeContacts(client, { primaryId, mergeId }) {
+  return client.mergeObjects({
+    objectType: 'contacts',
+    primaryId,
+    mergeId,
+    resources: ['contactsWrite'],
   });
 }
 

@@ -8,6 +8,7 @@ import { Command } from 'commander';
 import { buildContext } from './context.js';
 import { registerAuditCommands } from './commands/audit/index.js';
 import { registerBulkCommands } from './commands/bulk/index.js';
+import { registerDedupeCommands } from './commands/dedupe/index.js';
 
 const pkg = JSON.parse(
   readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8'),
@@ -43,6 +44,7 @@ export function buildProgram() {
 
   registerAuditCommands(program, withContext);
   registerBulkCommands(program, withContext);
+  registerDedupeCommands(program, withContext);
 
   return program;
 }

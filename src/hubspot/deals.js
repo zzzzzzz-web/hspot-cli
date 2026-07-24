@@ -68,6 +68,31 @@ export async function fetchOpenDeals(client, { pipelineName, onProgress, log } =
   return raw.map((deal) => enrichDeal(deal, { now, stageLabels, pipelineLabels, ownerNames }));
 }
 
+// Fetch ALL deals (open and closed) with a minimal property set, for dedupe.
+// Unlike `fetchOpenDeals` this does no pipeline/owner enrichment and does not
+// filter by status — dedupe only needs the key property + createdate. `by` is
+// the dedupe key property (e.g. `dealname`); `createdate` decides the primary.
+export function fetchAllDeals(client, { by = 'dealname', onProgress } = {}) {
+  const properties = [...new Set(['dealname', 'pipeline', 'createdate', by])];
+  return client.pageAll({
+    objectType: 'deals',
+    resources: ['deals'],
+    properties,
+    onProgress,
+  });
+}
+
+// Merge a duplicate deal into a primary one. WRITE operation — the command
+// layer must gate this behind --live. Owns the deals write scope.
+export function mergeDeals(client, { primaryId, mergeId }) {
+  return client.mergeObjects({
+    objectType: 'deals',
+    primaryId,
+    mergeId,
+    resources: ['dealsWrite'],
+  });
+}
+
 // Batch-update deals. `inputs` is [{ id, properties }]. WRITE operation — the
 // command layer must gate this behind --live. Owns the deals write scope so the
 // scope name never leaks into the command layer.

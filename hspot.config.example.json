@@ -11,5 +11,13 @@
       "missing": "phone,company,jobtitle",
       "lifecycleStage": "lead"
     }
+  },
+  "dedupe": {
+    "contacts": {
+      "by": "email"
+    },
+    "deals": {
+      "by": "dealname"
+    }
   }
 }
