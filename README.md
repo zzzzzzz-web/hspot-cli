@@ -268,6 +268,7 @@ src/commands/             CLI/command layer (Commander-aware).
   audit/contacts.js       `audit contacts` handler.
   bulk/index.js           The `bulk update` command group (writes; --live gated).
   bulk/update.js          Shared dry-run/confirm/write handler.
+  progress.js             Throttled stderr progress indicator for large fetches.
 src/hubspot/              HubSpot API layer (no Commander here).
   client.js               API client wrapper: pagination + batch write + retry + errors.
   deals.js                Deal fetching/enrichment + batch update.

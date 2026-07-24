@@ -18,7 +18,7 @@ test('parseSet parses repeatable key=value pairs', () => {
 });
 
 test('parseSet rejects malformed pairs', () => {
-  assert.throws(() => parseSet(['noequals']), /key=value/);
+  assert.throws(() => parseSet(['noequals']), /<key>=<value>/);
   assert.throws(() => parseSet(['=novalue']), /property name/);
 });
 
